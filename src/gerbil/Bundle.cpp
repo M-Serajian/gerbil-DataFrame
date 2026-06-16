@@ -63,6 +63,8 @@ bool gerbil::ReadBundle::expand(const uint32 &expLength, char* expRead) {
 
 bool gerbil::ReadBundle::transfer(ReadBundle* readbundle) {
 	uint32 rc= *readsCount;
+	if (rc == 0)            // precondition: readsCount>0. Guard the (rc-1) unsigned underflow.
+		return true;
 	bool res = readbundle->add(*(readOffsets - rc) - *(readOffsets - (rc - 1)) - 1, (char*)data + *(readOffsets - (rc - 1)));
 	if(!res)
 		return false;
@@ -72,6 +74,8 @@ bool gerbil::ReadBundle::transfer(ReadBundle* readbundle) {
 
 bool gerbil::ReadBundle::transferKm1(ReadBundle *readbundle) {
 	uint32 rc = *readsCount;
+	if (rc == 0)            // precondition: readsCount>0. Guard the (rc-1) unsigned underflow.
+		return true;
 	if (*(readOffsets - rc) - *(readOffsets - (rc - 1)) < K) {
 		return transfer(readbundle);
 	}

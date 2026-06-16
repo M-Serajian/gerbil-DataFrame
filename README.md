@@ -13,6 +13,21 @@ To cite Gerbil in publication, please use
 
 ## Changelog
 
+### gerbil-DataFrame (this fork)
+Changes relative to upstream gerbil:
+  * `-o csv`: write k-mers and counts as `K-mer,Frequency`, one per line.
+  * `-z <max>`: drop k-mers whose count exceeds `<max>` (pairs with `-l <min>`).
+  * Fixed a segfault (heap-buffer-overflow) on FASTA/FASTQ lines longer than a read
+    bundle — e.g. a chromosome on a single line, such as the 59 Mb chr19 FASTA.
+    The parser passes segments of up to `FAST_BUNDLE_DATA_SIZE_B` (512 KB) to a
+    `READ_BUNDLE_SIZE_B` (128 KB) bundle, so `add()`/`expand()` failed on a fresh
+    bundle, left `readsCount == 0`, and `expand()`/`transferKm1()` then underflowed
+    (writing at `data-1`, reading `readOffsets[-1]`). `READ_BUNDLE_SIZE_B` is now
+    `FAST_BUNDLE_DATA_SIZE_B + 64 KB` so a segment always fits a fresh bundle, and
+    `transfer()`/`transferKm1()` guard `readsCount == 0`. Output was checked against
+    KMC 3.2.1 k-mer-by-k-mer and count-by-count (SARS-CoV-2, M. tuberculosis, chr19;
+    k = 11/31/61) and is identical; counts on inputs that already worked are unchanged.
+
 ### Version 1.11
   * Minor Bugfixes and enhanced tolerance when reading malformed fasta files
 

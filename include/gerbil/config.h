@@ -143,7 +143,14 @@ namespace gerbil {
 // sizes of bundles
 #define FAST_BLOCK_SIZE_B                KB_TO_B( 64)
 #define FAST_BUNDLE_DATA_SIZE_B        KB_TO_B(512)
-#define READ_BUNDLE_SIZE_B                KB_TO_B(128)
+// A read bundle must hold at least one full parser segment. The parser scans one
+// FastBundle between nextPart() calls, so a segment is bounded by FAST_BUNDLE_DATA_SIZE_B;
+// READ_BUNDLE_SIZE_B must therefore be >= FAST_BUNDLE_DATA_SIZE_B. Otherwise a FASTA/FASTQ
+// line longer than this bundle makes add()/expand() fail on a fresh bundle, leaving
+// readsCount==0, and expand()/transferKm1() then underflow (heap-buffer-overflow on e.g.
+// single-line chromosome FASTA). +64KB headroom for the per-read 'E' terminator and the
+// readOffsets/readsCount bookkeeping stored at the tail of the buffer.
+#define READ_BUNDLE_SIZE_B                (FAST_BUNDLE_DATA_SIZE_B + KB_TO_B(64))
 #define SUPER_BUNDLE_DATA_SIZE_B        KB_TO_B( 32)
 #define KMER_BUNDLE_DATA_SIZE_B            KB_TO_B(128)
 #define KMC_BUNDLE_DATA_SIZE_B            KB_TO_B(256)
