@@ -62,7 +62,16 @@ namespace gerbil {
 	struct KMer<K, B, 8, C> {
 		uint64_t data[C];
 		static constexpr uint64_t _c_offset = 64 - (2 * (K % 32));
-		static constexpr uint64_t _c_mask = 0xffffffffffffffff << _c_offset;
+		// When K % 32 == 0 the high word (data[0], the "first block") is ENTIRELY
+		// unused, so its mask must be 0. The naive `0xff.. << _c_offset` computes
+		// `<< 64`, which is undefined behavior: on x86 the shift count is taken
+		// mod 64, giving `<< 0` == all-ones, so set() then keeps 8 bytes of garbage
+		// read past the k-mer in data[0]. That garbage (heap/thread dependent) made
+		// equal k-mers compare unequal -> nondeterministic counts + out-of-bounds
+		// reads -> segfaults for every k with K % 32 == 0 and C > 1 (k = 64, 96, 128).
+		static constexpr uint64_t _c_mask =
+				(K % 32 == 0) ? (uint64_t) 0
+				              : (0xffffffffffffffffULL << (64 - (2 * (K % 32))));
 	public:
 		/*
 		 * clears this KMer
