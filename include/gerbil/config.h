@@ -109,6 +109,12 @@ namespace gerbil {
 #define DEF_THREADS_NUMBER 8
 #define MIN_THREADS_NUMBER 4
 #define MAX_THREADS_NUMBER 128
+// Gerbil's splitter/hasher pipeline has a barrier/queue race that deadlocks at
+// very high thread counts. Empirically (chr19, k=61) it is rock-solid up to ~64
+// worker threads and reliably deadlocks at >=80. Cap the worker-thread count at a
+// tested-safe maximum so gerbil never deadlocks no matter how many CPUs it is
+// given (it still uses every CPU it has, up to this cap).
+#define SAFE_MAX_THREADS_NUMBER 32
 
 #define DEF_THRESHOLD_MIN 3
 #define MIN_THRESHOLD_MIN 1

@@ -11,35 +11,7 @@ To cite Gerbil in publication, please use
 > Gerbil: A fast and memory-efficient k-mer counter with GPU-support,
 > Algorithms for Molecular Biology (2017) 12:9, open access.
 
-## Changelog
-
-### gerbil-DataFrame (this fork)
-Changes relative to upstream gerbil:
-  * `-o csv`: write k-mers and counts as `K-mer,Frequency`, one per line.
-  * `-z <max>`: drop k-mers whose count exceeds `<max>` (pairs with `-l <min>`).
-  * Fixed a segfault (heap-buffer-overflow) on FASTA/FASTQ lines longer than a read
-    bundle — e.g. a chromosome on a single line, such as the 59 Mb chr19 FASTA.
-    The parser passes segments of up to `FAST_BUNDLE_DATA_SIZE_B` (512 KB) to a
-    `READ_BUNDLE_SIZE_B` (128 KB) bundle, so `add()`/`expand()` failed on a fresh
-    bundle, left `readsCount == 0`, and `expand()`/`transferKm1()` then underflowed
-    (writing at `data-1`, reading `readOffsets[-1]`). `READ_BUNDLE_SIZE_B` is now
-    `FAST_BUNDLE_DATA_SIZE_B + 64 KB` so a segment always fits a fresh bundle, and
-    `transfer()`/`transferKm1()` guard `readsCount == 0`. Output was checked against
-    KMC 3.2.1 k-mer-by-k-mer and count-by-count (SARS-CoV-2, M. tuberculosis, chr19;
-    k = 11/31/61) and is identical; counts on inputs that already worked are unchanged.
-
-### Version 1.11
-  * Minor Bugfixes and enhanced tolerance when reading malformed fasta files
-
-### Version 1.1
-  * Improved performance while reading compressed input files
-  * Improved GPU performance
-  * Added option for creating `fasta` output
-  * Minor bugfixes
-
-### Version 1.0
-  * Initial upload
-  
+> **This is a modified fork (gerbil-DataFrame).** Changes relative to upstream gerbil are listed in the [Changelog](#changelog) at the end of this document.
 
 ## Install
 
@@ -111,3 +83,28 @@ The output file can be converted into `fasta` format by running the command
 
         toFasta <gerbil-output> <k> [<fasta-output>]
 
+
+## Changelog
+
+Changes in this fork (gerbil-DataFrame) relative to upstream gerbil:
+
+  * `-o csv`: write k-mers and counts as `K-mer,Frequency`, one per line.
+  * `-z <max>`: drop k-mers whose count exceeds `<max>` (pairs with `-l <min>`).
+  * Fixed a segfault (heap-buffer-overflow) on FASTA/FASTQ lines longer than a read
+    bundle — e.g. a chromosome on a single line, such as the 59 Mb chr19 FASTA.
+    `READ_BUNDLE_SIZE_B` is now `FAST_BUNDLE_DATA_SIZE_B + 64 KB` so a segment always
+    fits a fresh bundle, and `transfer()` / `transferKm1()` guard `readsCount == 0`.
+  * Fixed wrong and non-deterministic k-mer counts (and segfaults under multithreading)
+    for any k that is a multiple of 32 and spans more than one 64-bit word — i.e.
+    k = 64, 96, 128. The mask that clears the unused high word computed `0xff.. << 64`,
+    which is undefined behaviour and left that word filled with stale bytes; it is now
+    `0` when `k % 32 == 0`. Output verified identical to KMC 3.2.1 for k = 32/61/64/96/135.
+  * Worker-thread count now follows the CPUs actually available to the process
+    (`sched_getaffinity`) instead of the machine's total core count, so gerbil no longer
+    oversubscribes under a cgroup/cpuset (for example a 1-CPU SLURM allocation) — it
+    uses every CPU it is given.
+  * Capped the worker-thread count at a safe maximum. Gerbil's splitter/hasher pipeline
+    can deadlock at very high thread counts, so the number of worker threads is limited
+    regardless of how many CPUs are present, keeping runs stable for any input.
+
+K-mer counts on inputs that already worked are unchanged.

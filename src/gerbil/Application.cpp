@@ -5,12 +5,16 @@
  *      Author: marius
  */
 
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE            // for sched_getaffinity / CPU_COUNT
+#endif
 #include "../../include/gerbil/Application.h"
 #include <boost/regex.hpp>
 #include <boost/lexical_cast.hpp>
 
 #ifdef __linux__
 #include <sys/sysinfo.h>
+#include <sched.h>
 #elif _WIN32
 #include <windows.h>
 #else
@@ -659,15 +663,43 @@ void gerbil::Application::checkSystem() {
 	}*/
 }
 
+// Number of CPUs actually available to THIS process (honours cgroup/cpuset/taskset).
+// std::thread::hardware_concurrency() returns the machine's FULL core count even under
+// a restrictive SLURM allocation (e.g. 112 on a 1-CPU job), so gerbil used to spawn
+// ~112 splitter/hasher threads that deadlocked the pipeline (all parked in
+// pthread_cond_wait on the SyncSwapQueue / Barrier::sync()). Sizing the default thread
+// pool to the affinity mask keeps the count sane and matches the resources granted.
+static unsigned gerbilUsableCPUs() {
+#ifdef __linux__
+	cpu_set_t set;
+	CPU_ZERO(&set);
+	if (sched_getaffinity(0, sizeof(set), &set) == 0) {
+		int n = CPU_COUNT(&set);
+		if (n > 0)
+			return (unsigned) n;
+	}
+#endif
+	unsigned hc = std::thread::hardware_concurrency();
+	return hc ? hc : 1u;
+}
+
 void gerbil::Application::autocompleteParams() {
 #define SET_DEFAULT(x, d) if(!x) x = d
 
 	// set to default values
 	SET_DEFAULT(_k, DEF_KMER_SIZE);
 	SET_DEFAULT(_threadsNumber,
-			std::thread::hardware_concurrency() < MIN_THREADS_NUMBER ? DEF_THREADS_NUMBER : std::thread::hardware_concurrency());
+			gerbilUsableCPUs() < MIN_THREADS_NUMBER ? DEF_THREADS_NUMBER : gerbilUsableCPUs());
 	if (_threadsNumber < 4)
 		_threadsNumber = 4;
+	// Deadlock-safe cap: gerbil's pipeline races/hangs at very high thread counts.
+	// Applies to BOTH auto-detected and explicit -t, so gerbil never deadlocks no
+	// matter how many CPUs it is handed (it still uses every CPU up to this cap).
+	if (_threadsNumber > SAFE_MAX_THREADS_NUMBER) {
+		printf("note: limiting worker threads %u -> %u (deadlock-safe cap)\n",
+				(unsigned) _threadsNumber, (unsigned) SAFE_MAX_THREADS_NUMBER);
+		_threadsNumber = SAFE_MAX_THREADS_NUMBER;
+	}
 	SET_DEFAULT(_sequenceSplitterThreadsNumber,
 			_threadsNumber <= 4 ? 2 : _threadsNumber - 3);
 
